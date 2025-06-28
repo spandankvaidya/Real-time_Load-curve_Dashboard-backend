@@ -1,15 +1,9 @@
 dash
 gunicorn
 plotly
-sys
 polars
-os
 lightgbm
 numpy
-datetime
-dateutil
-dash
-time
-fastapi
-subprocess
+python-dateutil
 pandas
+fastapi
