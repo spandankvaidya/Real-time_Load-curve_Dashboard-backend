@@ -1,9 +1,9 @@
-dash
-gunicorn
-plotly
+fastapi
+uvicorn
 polars
 lightgbm
 numpy
 python-dateutil
-pandas
-fastapi
+dash
+gunicorn
+plotly
