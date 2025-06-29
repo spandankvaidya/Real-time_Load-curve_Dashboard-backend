@@ -3,8 +3,22 @@ from fastapi.responses import JSONResponse
 from app.model import load_and_predict
 from app.dash_app import launch_dash_app
 import threading
-
+from fastapi.responses import HTMLResponse
 app = FastAPI()
+
+@app.get("/")
+def root():
+    return HTMLResponse(content="<h3>✅ FastAPI backend is running.</h3>")
+
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # or specify your frontend domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Launch Dash app in background
 threading.Thread(target=launch_dash_app, daemon=True).start()
