@@ -7,3 +7,4 @@ python-dateutil
 dash
 gunicorn
 plotly
+pyarrow
