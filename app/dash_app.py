@@ -1,12 +1,10 @@
-# dash_app.py
-
 from dash import Dash, html, dcc
 from dash.dependencies import Input, Output
 import plotly.graph_objs as go
 from app.model import predicted_values, actual_values, time_ticks
 
-# Create Dash instance WITHOUT calling run()
-dash_app = Dash(__name__, requests_pathname_prefix='/dashboard/')
+# Create Dash app
+dash_app = Dash(__name__, requests_pathname_prefix="/dashboard/")
 
 dash_app.layout = html.Div([
     html.H3("🔴 Real-time Load Curve", style={"textAlign": "center"}),
@@ -31,5 +29,5 @@ def update_graph(n):
         )
     }
 
-# We expose the server object so FastAPI can mount it
-dash_server = dash_app.server
+# We expose the internal WSGI app to mount into FastAPI
+server = dash_app.server
