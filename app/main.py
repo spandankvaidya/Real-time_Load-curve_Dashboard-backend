@@ -5,6 +5,7 @@ from app.model import load_and_predict
 from app.dash_app import launch_dash_app
 import threading
 import os
+from app.dash_app import launch_dash_app
 
 app = FastAPI()
 
