@@ -3,15 +3,21 @@ from dash.dependencies import Input, Output
 import plotly.graph_objs as go
 from app.model import predicted_values, actual_values, time_ticks
 
-# Create Dash app
-dash_app = Dash(__name__, requests_pathname_prefix="/dashboard/")
+# Define the Dash app with proper prefix
+dash_app = Dash(
+    __name__,
+    routes_pathname_prefix="/dashboard/",  # <- required for FastAPI mount
+    requests_pathname_prefix="/dashboard/"
+)
 
+# Define layout
 dash_app.layout = html.Div([
     html.H3("🔴 Real-time Load Curve", style={"textAlign": "center"}),
     dcc.Graph(id='live-graph', style={"height": "80vh"}),
     dcc.Interval(id='interval', interval=1000, n_intervals=0)
 ])
 
+# Update logic
 @dash_app.callback(
     Output('live-graph', 'figure'),
     Input('interval', 'n_intervals')
@@ -29,5 +35,5 @@ def update_graph(n):
         )
     }
 
-# We expose the internal WSGI app to mount into FastAPI
+# Export server for mounting
 server = dash_app.server
