@@ -1,16 +1,10 @@
-import os
-import polars as pl
 import lightgbm as lgb
+import polars as pl
 import numpy as np
-from datetime import datetime
 from dateutil import parser
+from app import globals
 
-# Global for Dash
-predicted_values = []
-actual_values = []
-time_ticks = []
-
-model = lgb.Booster(model_file='app/lightgbm_power_model_2.txt')
+model = lgb.Booster(model_file="lightgbm_power_model_2.txt")
 
 def transform_datetime_column(pl_df):
     dt_series = pl_df['Datetime'].to_list()
@@ -30,32 +24,49 @@ def transform_datetime_column(pl_df):
         pl.Series('Time_sin', time_sin),
         pl.Series('Time_cos', time_cos)
     ])
-    return pl_df.drop('Datetime'), [dt.strftime("%H:%M") for dt in dt_objects]
+
+    return pl_df.drop("Datetime"), dt_objects
 
 def load_and_predict(date):
-    file_path = f"app/test/{date}.csv"
-    if not os.path.exists(file_path):
+    from pathlib import Path
+    import pandas as pd
+
+    file_path = f"data/{date}.csv"
+    if not Path(file_path).exists():
         return False
 
-    df = pl.read_csv(file_path)
-    y_true = df["PowerConsumption"]
-    X = df.drop("PowerConsumption")
+    df = pd.read_csv(file_path)
+    globals.predicted_values.clear()
+    globals.actual_values.clear()
+    globals.timestamps.clear()
+    globals.selected_date = date
 
-    X_transformed, time_labels = transform_datetime_column(X)
-    X_transformed = X_transformed.to_pandas()[[
-        'Month_sin', 'Month_cos', 'Time_sin', 'Time_cos',
-        'Temperature', 'Humidity', 'WindSpeed',
-        'GeneralDiffuseFlows', 'DiffuseFlows'
-    ]]
+    for _, row in df.iterrows():
+        features = {
+            'Datetime': row['Datetime'],
+            'Temperature': row['Temperature'],
+            'Humidity': row['Humidity'],
+            'WindSpeed': row['WindSpeed'],
+            'GeneralDiffuseFlows': row['GeneralDiffuseFlows'],
+            'DiffuseFlows': row['DiffuseFlows']
+        }
+        actual = row['POWER']
 
-    predicted = model.predict(X_transformed)
+        pl_df = pl.DataFrame([features])
+        pl_df, dt_objects = transform_datetime_column(pl_df)
 
-    # Store for Dash
-    predicted_values.clear()
-    actual_values.clear()
-    time_ticks.clear()
+        X = pl_df.to_pandas()
+        X = X[[  # Ensure correct feature order
+            'Month_sin', 'Month_cos', 'Time_sin', 'Time_cos',
+            'Temperature', 'Humidity', 'WindSpeed',
+            'GeneralDiffuseFlows', 'DiffuseFlows'
+        ]]
 
-    predicted_values.extend(predicted)
-    actual_values.extend(y_true)
-    time_ticks.extend(time_labels)
+        prediction = model.predict(X)[0]
+        time_str = dt_objects[0].strftime("%H:%M")
+
+        globals.predicted_values.append(prediction)
+        globals.actual_values.append(actual)
+        globals.timestamps.append(time_str)
+
     return True
