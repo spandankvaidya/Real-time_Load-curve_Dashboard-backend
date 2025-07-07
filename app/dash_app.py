@@ -1,30 +1,30 @@
 from dash import Dash, html, dcc
 from dash.dependencies import Input, Output
 import plotly.graph_objs as go
-from app import globals
+import os
 
-def create_dash_app(server):
-    app = Dash(__name__, server=server, routes_pathname_prefix='/dashboard/')
+# Import global variables if needed
+from app.globals import predicted_values, actual_values, time_ticks, selected_date
 
-    app.layout = html.Div([
-        html.H2("🔴 Real-time Power Consumption Prediction"),
+def create_dash_app():
+    dash_app = Dash(
+        __name__,
+        routes_pathname_prefix='/dashboard/',  # Dash will be served at /dashboard
+    )
+
+    dash_app.layout = html.Div([
+        html.H3("🔴 Real-time Load Curve", style={"textAlign": "center"}),
         html.H4(id='selected-date-display'),
-        dcc.Graph(id='live-graph'),
+        dcc.Graph(id='live-graph', style={"height": "80vh"}),
         dcc.Interval(id='interval', interval=1000, n_intervals=0)
     ])
 
-    @app.callback(Output('live-graph', 'figure'), Input('interval', 'n_intervals'))
+    @dash_app.callback(Output('live-graph', 'figure'), Input('interval', 'n_intervals'))
     def update_graph(n):
-        if not globals.predicted_values:
-            return {
-                'data': [],
-                'layout': go.Layout(title="Waiting for data...", height=600)
-            }
-
         return {
             'data': [
-                go.Scatter(x=globals.timestamps[:n], y=globals.predicted_values[:n], name='Predicted', line=dict(color='blue')),
-                go.Scatter(x=globals.timestamps[:n], y=globals.actual_values[:n], name='Actual', line=dict(color='red'))
+                go.Scatter(x=time_ticks[:n], y=predicted_values[:n], name='Predicted', line=dict(color='blue')),
+                go.Scatter(x=time_ticks[:n], y=actual_values[:n], name='Actual', line=dict(color='red'))
             ],
             'layout': go.Layout(
                 xaxis={'title': 'Time'},
@@ -33,8 +33,8 @@ def create_dash_app(server):
             )
         }
 
-    @app.callback(Output('selected-date-display', 'children'), Input('interval', 'n_intervals'))
+    @dash_app.callback(Output('selected-date-display', 'children'), Input('interval', 'n_intervals'))
     def update_date_display(_):
-        return f"📅 Forecast for: {globals.selected_date}"
+        return f"📅 Forecast for: {selected_date}" if selected_date else ""
 
-    return app
+    return dash_app
