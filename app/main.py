@@ -1,32 +1,37 @@
-from fastapi import FastAPI, Query
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.wsgi import WSGIMiddleware
 from app.model import load_and_predict
 from app.dash_app import create_dash_app
+from fastapi.responses import JSONResponse, HTMLResponse
+import threading
+import os
 
 app = FastAPI()
 
-# CORS
+# CORS setup
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"]
+    allow_headers=["*"],
 )
 
 @app.get("/")
 def root():
-    return {"status": "FastAPI backend is running."}
+    return HTMLResponse(content="<h3>✅ FastAPI backend is running.</h3>")
 
 @app.get("/run-forecast")
-def run_forecast(date: str = Query(..., regex=r"\d{4}-\d{2}-\d{2}")):
+def run_forecast(date: str):
     success = load_and_predict(date)
     if success:
-        return {"status": "success", "date": date}
-    return JSONResponse(status_code=404, content={"error": "CSV not found"})
+        return JSONResponse(content={"status": "success", "date": date})
+    else:
+        return JSONResponse(content={"status": "error", "message": f"CSV not found for {date}"}, status_code=400)
 
-# Mount Dash app
-dash_app = create_dash_app(app)
-app.mount("/dashboard", WSGIMiddleware(dash_app.server))
+# Launch Dash server on a separate port (e.g. 8050)
+def run_dash():
+    dash_app = create_dash_app()
+    dash_app.run_server(host="0.0.0.0", port=8050)
+
+# Background thread for Dash
+threading.Thread(target=run_dash, daemon=True).start()
