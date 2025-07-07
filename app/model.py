@@ -4,7 +4,11 @@ import numpy as np
 from dateutil import parser
 from app import globals
 
-model = lgb.Booster(model_file="lightgbm_power_model_2.txt")
+import os
+
+model_path = os.path.join(os.path.dirname(__file__), "lightgbm_power_model_2.txt")
+model = lgb.Booster(model_file=model_path)
+
 
 def transform_datetime_column(pl_df):
     dt_series = pl_df['Datetime'].to_list()
