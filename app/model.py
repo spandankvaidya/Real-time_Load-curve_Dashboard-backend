@@ -1,5 +1,3 @@
-# In app/model.py
-
 import lightgbm as lgb
 import polars as pl
 import numpy as np
@@ -7,15 +5,18 @@ from dateutil import parser
 import os
 from pathlib import Path
 
-# Load model only once when the module is imported
+# --- No changes here, model loading is correct ---
 model_path = os.path.join(os.path.dirname(__file__), "lightgbm_power_model_2.txt")
 model = lgb.Booster(model_file=model_path)
 
 
-def transform_datetime_features(pl_df):
-    # This function is fine, just renaming for clarity
-    # ... (no changes needed inside this function, I'm just copying it here for completeness)
-    dt_series = pl_df['Datetime'].to_list()
+# --- OPTIMIZATION: This function now processes the entire DataFrame at once ---
+def transform_datetime_features(pl_df: pl.DataFrame):
+    """
+    Takes a Polars DataFrame and adds sin/cos transformed datetime features.
+    This vectorized version is much faster than processing row-by-row.
+    """
+    dt_series = pl_df['Datetime']
     dt_objects = [parser.parse(dt) for dt in dt_series]
 
     months = [dt.month for dt in dt_objects]
@@ -26,46 +27,63 @@ def transform_datetime_features(pl_df):
     time_sin = [np.sin(2 * np.pi * t / 1440) for t in minutes]
     time_cos = [np.cos(2 * np.pi * t / 1440) for t in minutes]
 
-    pl_df = pl_df.with_columns([
+    # Add new columns to the DataFrame
+    pl_df_transformed = pl_df.with_columns([
         pl.Series('Month_sin', month_sin),
         pl.Series('Month_cos', month_cos),
         pl.Series('Time_sin', time_sin),
         pl.Series('Time_cos', time_cos)
     ])
 
-    return pl_df.drop("Datetime"), dt_objects
+    return pl_df_transformed, dt_objects
 
 
+# --- FIX: This is the new, stateless function our Dash app needs ---
 def run_prediction_for_date(date: str):
-    # CORRECTED FILE PATH LOGIC
-    # Assumes your data is in `app/test/` relative to the project root
+    """
+    Loads data for a specific date, runs the prediction model on the whole file,
+    and returns the results in a dictionary. This is stateless and efficient.
+    """
+    # --- FIX: Correct path for your file structure (app/test/...) ---
     file_path = Path(__file__).parent / "test" / f"{date}.csv"
-    
+
     if not file_path.exists():
-        print(f"Error: Data file not found at {file_path}")
-        return None # Return None if file not found
+        # This print statement is your best friend for debugging on Render.
+        # It will show up in your Render logs if the file isn't found.
+        print(f"DEBUG: Attempted to find file at absolute path: {file_path.resolve()}")
+        print(f"Error: Data file not found for date {date}.")
+        return None  # Return None to signal an error to the Dash app
 
-    # Using polars for faster CSV reading
-    df = pl.read_csv(file_path)
+    print(f"Success: Found data file for {date} at {file_path}")
 
-    # Transform features and get datetime objects
-    features_df, dt_objects = transform_datetime_features(df.clone())
-    
-    # Select features for prediction in the correct order
-    X = features_df.select([
-        'Month_sin', 'Month_cos', 'Time_sin', 'Time_cos',
-        'Temperature', 'Humidity', 'WindSpeed',
-        'GeneralDiffuseFlows', 'DiffuseFlows'
-    ]).to_pandas()
+    # --- OPTIMIZATION: Use fast Polars to read CSV and process features ---
+    try:
+        df_original = pl.read_csv(file_path)
+        
+        # Transform the features for the entire DataFrame
+        features_df, dt_objects = transform_datetime_features(df_original.clone())
 
-    # Get predictions
-    predictions = model.predict(X)
+        # Select features and convert to Pandas for the model
+        # The lightgbm model expects features in this specific order
+        X_predict = features_df.select([
+            'Month_sin', 'Month_cos', 'Time_sin', 'Time_cos',
+            'Temperature', 'Humidity', 'WindSpeed',
+            'GeneralDiffuseFlows', 'DiffuseFlows'
+        ]).to_pandas()
 
-    # Prepare results
-    results = {
-        "timestamps": [dt.strftime("%H:%M") for dt in dt_objects],
-        "predicted_values": predictions.tolist(),
-        "actual_values": df['POWER'].to_list()
-    }
-    
-    return results
+        # --- OPTIMIZATION: Predict on all rows at once ---
+        predictions = model.predict(X_predict)
+
+        # Prepare results dictionary to be returned
+        results = {
+            "timestamps": [dt.strftime("%H:%M") for dt in dt_objects],
+            "predicted_values": predictions.tolist(),
+            "actual_values": df_original['POWER'].to_list()
+        }
+        
+        return results
+
+    except Exception as e:
+        # Catch any other errors during processing
+        print(f"Error processing file for date {date}: {e}")
+        return None
