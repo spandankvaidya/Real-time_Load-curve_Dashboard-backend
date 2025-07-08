@@ -1,16 +1,20 @@
+# In app/model.py
+
 import lightgbm as lgb
 import polars as pl
 import numpy as np
 from dateutil import parser
-from app import globals
-
 import os
+from pathlib import Path
 
+# Load model only once when the module is imported
 model_path = os.path.join(os.path.dirname(__file__), "lightgbm_power_model_2.txt")
 model = lgb.Booster(model_file=model_path)
 
 
-def transform_datetime_column(pl_df):
+def transform_datetime_features(pl_df):
+    # This function is fine, just renaming for clarity
+    # ... (no changes needed inside this function, I'm just copying it here for completeness)
     dt_series = pl_df['Datetime'].to_list()
     dt_objects = [parser.parse(dt) for dt in dt_series]
 
@@ -31,46 +35,37 @@ def transform_datetime_column(pl_df):
 
     return pl_df.drop("Datetime"), dt_objects
 
-def load_and_predict(date):
-    from pathlib import Path
-    import pandas as pd
 
-    file_path = f"data/{date}.csv"
-    if not Path(file_path).exists():
-        return False
+def run_prediction_for_date(date: str):
+    # CORRECTED FILE PATH LOGIC
+    # Assumes your data is in `app/test/` relative to the project root
+    file_path = Path(__file__).parent / "test" / f"{date}.csv"
+    
+    if not file_path.exists():
+        print(f"Error: Data file not found at {file_path}")
+        return None # Return None if file not found
 
-    df = pd.read_csv(file_path)
-    globals.predicted_values.clear()
-    globals.actual_values.clear()
-    globals.timestamps.clear()
-    globals.selected_date = date
+    # Using polars for faster CSV reading
+    df = pl.read_csv(file_path)
 
-    for _, row in df.iterrows():
-        features = {
-            'Datetime': row['Datetime'],
-            'Temperature': row['Temperature'],
-            'Humidity': row['Humidity'],
-            'WindSpeed': row['WindSpeed'],
-            'GeneralDiffuseFlows': row['GeneralDiffuseFlows'],
-            'DiffuseFlows': row['DiffuseFlows']
-        }
-        actual = row['POWER']
+    # Transform features and get datetime objects
+    features_df, dt_objects = transform_datetime_features(df.clone())
+    
+    # Select features for prediction in the correct order
+    X = features_df.select([
+        'Month_sin', 'Month_cos', 'Time_sin', 'Time_cos',
+        'Temperature', 'Humidity', 'WindSpeed',
+        'GeneralDiffuseFlows', 'DiffuseFlows'
+    ]).to_pandas()
 
-        pl_df = pl.DataFrame([features])
-        pl_df, dt_objects = transform_datetime_column(pl_df)
+    # Get predictions
+    predictions = model.predict(X)
 
-        X = pl_df.to_pandas()
-        X = X[[  # Ensure correct feature order
-            'Month_sin', 'Month_cos', 'Time_sin', 'Time_cos',
-            'Temperature', 'Humidity', 'WindSpeed',
-            'GeneralDiffuseFlows', 'DiffuseFlows'
-        ]]
-
-        prediction = model.predict(X)[0]
-        time_str = dt_objects[0].strftime("%H:%M")
-
-        globals.predicted_values.append(prediction)
-        globals.actual_values.append(actual)
-        globals.timestamps.append(time_str)
-
-    return True
+    # Prepare results
+    results = {
+        "timestamps": [dt.strftime("%H:%M") for dt in dt_objects],
+        "predicted_values": predictions.tolist(),
+        "actual_values": df['POWER'].to_list()
+    }
+    
+    return results
