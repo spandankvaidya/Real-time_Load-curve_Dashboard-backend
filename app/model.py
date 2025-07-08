@@ -78,7 +78,7 @@ def run_prediction_for_date(date: str):
         results = {
             "timestamps": [dt.strftime("%H:%M") for dt in dt_objects],
             "predicted_values": predictions.tolist(),
-            "actual_values": df_original['POWER'].to_list()
+            "actual_values": df_original['PowerConsumption'].to_list()
         }
         
         return results
